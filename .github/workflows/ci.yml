@@ -16,8 +16,17 @@ jobs:
         with:
           components: clippy
 
-      - name: Create dummy web/dist for include_dir
-        run: mkdir -p web/dist && echo '<html></html>' > web/dist/index.html
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build web frontend
+        run: |
+          cd web
+          npm install -g pnpm
+          pnpm install
+          pnpm build
 
       - name: Check
         run: cargo check --workspace
