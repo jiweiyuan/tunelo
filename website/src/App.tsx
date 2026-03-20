@@ -44,7 +44,7 @@ export default function App() {
   Forwarding:  → file server (web explorer)`}</CodeBlock>
 
       <P>
-        Other tunnel tools need config files, accounts, or dashboards. Tunelo is a <strong>single binary</strong> that does two things: expose a local port, or serve files with a built-in web explorer. QUIC transport gives you multiplexed, encrypted, low-latency tunneling.
+        Other tunnel tools need config files, accounts, or dashboards. Tunelo is a <strong>single binary</strong> that does two things: expose a local port, or serve files with a built-in web explorer. QUIC transport gives you multiplexed, encrypted, low-latency tunneling. By default, the client connects to the public relay at <Code>tunelo.net</Code> — or point it at your own with <Code>--relay</Code>.
       </P>
 
       <Section id="quick-start" title="Quick start">
@@ -59,7 +59,7 @@ export default function App() {
         <CodeBlock lang="bash">{`tunelo http 3000`}</CodeBlock>
 
         <P>
-          That's it. The tunnel assigns a public URL like <Code>https://abc123.tunelo.net</Code>. Share it with anyone — they'll hit your localhost through an encrypted QUIC tunnel.
+          That's it — no flags needed. The client connects to the public relay at <Code>tunelo.net</Code> by default, assigns you a public URL like <Code>https://abc123.tunelo.net</Code>, and starts relaying traffic to your localhost through an encrypted QUIC tunnel.
         </P>
 
         <P>Install the <strong>skill</strong> to teach your AI coding agent how to use tunelo:</P>
@@ -131,13 +131,13 @@ tunelo . --subdomain files`}</CodeBlock>
 
       <Section id="cli-reference" title="CLI reference">
         <P>
-          The client has <strong>one command</strong>. The relay has sensible defaults. Everything you need, nothing you don't.
+          The client and relay are <strong>fully decoupled</strong>. The client defaults to the public relay at <Code>tunelo.net:4433</Code> — or use <Code>--relay</Code> to point at your own. No account, no signup.
         </P>
 
         <CodeBlock lang="bash">{`# Port mode — expose a local HTTP service
 tunelo http 3000
 tunelo http 3000 --subdomain myapp
-tunelo http 3000 --relay tunelo.net:4433
+tunelo http 3000 --relay my.server:4433
 tunelo http 3000 -H 192.168.1.100
 tunelo http 3000 --private
 tunelo http 3000 --code mysecret
@@ -165,7 +165,7 @@ tunelo-relay --tunnel-addr 0.0.0.0:4433 --http-addr 0.0.0.0:80`}</CodeBlock>
 
       <Section id="self-hosting" title="Self-hosting">
         <P>
-          Tunelo is fully self-hostable. Run your own relay on any VPS. The <A href="https://github.com/jiweiyuan/tunelo/tree/main/deploy">deploy/</A> directory has everything: systemd service, nginx config, Let's Encrypt with Cloudflare DNS.
+          Don't want to use the public relay? Run your own on any VPS. The client and relay are separate binaries — just point <Code>--relay</Code> at your server. The <A href="https://github.com/jiweiyuan/tunelo/tree/main/deploy">deploy/</A> directory has everything: systemd service, nginx config, Let's Encrypt with Cloudflare DNS.
         </P>
 
         <CodeBlock lang="bash">{`# Build the relay

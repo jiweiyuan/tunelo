@@ -29,6 +29,7 @@ Browser → HTTPS → Relay → QUIC stream → Client → localhost:3000
 - **QUIC tunnel** (quinn + rustls) — multiplexed, encrypted, low-latency
 - **Zero-copy data plane** — `copy_bidirectional` between TCP and QUIC streams
 - **Built-in file server** — embedded React frontend with file explorer, viewers for code/markdown/PDF/images/video/audio/CSV/Excel
+- **Decoupled client + relay** — client defaults to `tunelo.net`, or self-host your own relay
 
 ## Quick Start
 
