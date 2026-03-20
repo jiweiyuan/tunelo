@@ -13,6 +13,7 @@ import {
 
 const TOC = [
   { label: 'Quick start', href: '#quick-start' },
+  { label: 'File server', href: '#file-server' },
   { label: 'How it works', href: '#how-it-works' },
   { label: 'CLI reference', href: '#cli-reference' },
   { label: 'Self-hosting', href: '#self-hosting' },
@@ -26,7 +27,7 @@ export default function App() {
   return (
     <EditorialPage toc={TOC}>
       <P>
-        Expose local services to the internet through a public HTTPS URL. One command, instant tunnel. Built in <strong>Rust</strong> — 1,165 lines, 8 MB memory, zero-copy data plane. <A href="https://github.com/jiweiyuan/tunelo">Star on GitHub</A>.
+        Expose anything to the internet — local ports, files, directories. One command, instant HTTPS tunnel. Built in <strong>Rust</strong> — single binary, 8 MB memory, zero-copy data plane. <A href="https://github.com/jiweiyuan/tunelo">Star on GitHub</A>.
       </P>
 
       <CodeBlock lang="bash" showLineNumbers={false}>{`$ tunelo http 3000
@@ -35,8 +36,15 @@ export default function App() {
   Public URL:  https://abc123.tunelo.net
   Forwarding:  → http://localhost:3000`}</CodeBlock>
 
+      <CodeBlock lang="bash" showLineNumbers={false}>{`$ tunelo .
+  ▸ Serving /Users/you/project on :51234
+  ✔ Tunnel is ready!
+
+  Public URL:  https://xyz789.tunelo.net
+  Forwarding:  → file server (web explorer)`}</CodeBlock>
+
       <P>
-        Other tunnel tools need config files, accounts, or dashboards. Tunelo is a <strong>single binary</strong> — run <Code>tunelo http 3000</Code> and you're live. QUIC transport gives you multiplexed, encrypted, low-latency tunneling with no head-of-line blocking.
+        Other tunnel tools need config files, accounts, or dashboards. Tunelo is a <strong>single binary</strong> that does two things: expose a local port, or serve files with a built-in web explorer. QUIC transport gives you multiplexed, encrypted, low-latency tunneling.
       </P>
 
       <Section id="quick-start" title="Quick start">
@@ -58,6 +66,44 @@ export default function App() {
         <CodeBlock lang="bash" showLineNumbers={false}>{`npx -y skills add tunelo/tunelo`}</CodeBlock>
 
         <Caption>The skill teaches your agent the CLI, when to use tunnels, and handles setup automatically.</Caption>
+      </Section>
+
+      <Section id="file-server" title="File server">
+        <P>
+          Run <Code>tunelo .</Code> or <Code>tunelo ./dist</Code> and tunelo starts a <strong>built-in file server</strong> with a React web explorer — embedded directly in the binary. Browse directories, preview files, share them through a public URL. No nginx, no Python server, no external dependencies.
+        </P>
+
+        <CodeBlock lang="bash">{`# Serve current directory through a tunnel
+tunelo .
+
+# Serve a specific directory
+tunelo ./dist
+
+# Local-only preview (no tunnel)
+tunelo . --local
+
+# Local preview on a specific port
+tunelo . -l -p 8000
+
+# With custom subdomain
+tunelo . --subdomain files`}</CodeBlock>
+
+        <P>The web explorer supports:</P>
+        <List>
+          <Li><strong>Directory browsing</strong> — navigate folders with breadcrumbs, sorted listing</Li>
+          <Li><strong>Code viewer</strong> — syntax highlighting for source files</Li>
+          <Li><strong>Markdown</strong> — rendered with full formatting</Li>
+          <Li><strong>PDF viewer</strong> — embedded PDF rendering</Li>
+          <Li><strong>Media players</strong> — video, audio, image preview with seeking support</Li>
+          <Li><strong>Data tables</strong> — CSV and Excel file viewer</Li>
+          <Li><strong>Range requests</strong> — streaming for large files, seeking in media</Li>
+        </List>
+
+        <P>
+          The frontend is compiled into the binary at build time via <Code>include_dir!</Code>. The file server API is two endpoints: <Code>/_api/ls</Code> for directory listings and <Code>/_api/raw</Code> for file content. Everything else serves the SPA.
+        </P>
+
+        <Caption>One binary. File server + web explorer + tunnel. No setup.</Caption>
       </Section>
 
       <Section id="how-it-works" title="How it works">
@@ -88,17 +134,20 @@ export default function App() {
           The client has <strong>one command</strong>. The gateway has sensible defaults. Everything you need, nothing you don't.
         </P>
 
-        <CodeBlock lang="bash">{`# Expose a local HTTP service
+        <CodeBlock lang="bash">{`# Port mode — expose a local HTTP service
 tunelo http 3000
-
-# Request a specific subdomain
 tunelo http 3000 --subdomain myapp
-
-# Custom gateway
 tunelo http 3000 --gateway tunelo.net:4433
+tunelo http 3000 -H 192.168.1.100
+tunelo http 3000 --private
+tunelo http 3000 --code mysecret
 
-# Forward to a different host
-tunelo http 8080 -H 192.168.1.100`}</CodeBlock>
+# File mode — serve files with web explorer
+tunelo .
+tunelo ./dist
+tunelo . --subdomain files
+tunelo . --local
+tunelo . -l -p 8000`}</CodeBlock>
 
         <P>Gateway configuration:</P>
 

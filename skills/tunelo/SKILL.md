@@ -1,6 +1,6 @@
 ---
 name: tunelo
-description: Expose local services to the internet through a public HTTPS URL using tunelo. Use this when you need to share a local dev server, demo an app, or give someone temporary access to localhost.
+description: Expose anything to the internet — local ports, files, directories — through a public HTTPS URL using tunelo. Use this when you need to share a local dev server, serve files, demo an app, or give someone temporary access to localhost.
 ---
 
 ## Quick Start
@@ -9,10 +9,12 @@ description: Expose local services to the internet through a public HTTPS URL us
 # Expose a local HTTP service on port 3000
 tunelo http 3000
 
+# Serve a directory with built-in web explorer
+tunelo .
+
 # Output:
 #   ✔ Tunnel is ready!
 #   Public URL:  https://abc123.tunelo.net
-#   Forwarding:  → http://localhost:3000
 ```
 
 ## Install
@@ -27,14 +29,28 @@ cargo install tunelo-client
 
 ## Commands
 
-### Expose a local service
+### Expose a local service (port mode)
 
 ```bash
 tunelo http <PORT>                            # Expose HTTP service
 tunelo http <PORT> --subdomain myapp          # Request specific subdomain
 tunelo http <PORT> --gateway tunelo.net:4433  # Custom gateway (default: tunelo.net)
 tunelo http <PORT> -H 0.0.0.0                # Forward to non-localhost host
+tunelo http <PORT> --private                  # Private tunnel (auto access code)
+tunelo http <PORT> --code mysecret            # Private tunnel (specific code)
 ```
+
+### Serve files (file mode)
+
+```bash
+tunelo .                                      # Serve current directory
+tunelo ./dist                                 # Serve a specific directory
+tunelo . --subdomain files                    # With custom subdomain
+tunelo . --local                              # Local-only preview (no tunnel)
+tunelo . -l -p 8000                           # Local preview on port 8000
+```
+
+File mode starts a built-in web explorer with directory browsing, code highlighting, markdown rendering, PDF/image/video/audio viewers, and CSV/Excel tables. The frontend is embedded in the binary.
 
 ### Common examples
 
@@ -42,20 +58,21 @@ tunelo http <PORT> -H 0.0.0.0                # Forward to non-localhost host
 # Share a React dev server
 tunelo http 5173
 
-# Share a Python server with a custom subdomain
-tunelo http 8000 --subdomain demo
+# Share project files with a colleague
+tunelo . --subdomain demo
 
-# Expose an API server
-tunelo http 3001 --subdomain api
+# Preview a static site locally
+tunelo ./dist --local
 
-# Forward to a different host on your network
-tunelo http 8080 -H 192.168.1.100
+# Expose an API with access control
+tunelo http 3001 --private
 ```
 
 ## How It Works
 
 ```
 Browser → HTTPS → tunelo.net gateway → QUIC stream → tunelo client → localhost:PORT
+                                                                    → file server
 ```
 
 1. Client opens a QUIC tunnel to the gateway
@@ -69,4 +86,5 @@ Browser → HTTPS → tunelo.net gateway → QUIC stream → tunelo client → l
 - Press `Ctrl+C` to close the tunnel
 - Subdomains are first-come-first-served; use `--subdomain` to request a specific one
 - The public URL is HTTPS — TLS is terminated at the gateway
-- QUIC transport means multiplexed, encrypted, low-latency tunneling
+- Use `--private` to generate an access code, or `--code` to set your own
+- File mode embeds the web explorer in the binary — no external dependencies
