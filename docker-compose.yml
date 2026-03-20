@@ -1,0 +1,11 @@
+services:
+  relay:
+    build: .
+    container_name: tunelo-relay
+    command: ["relay", "--domain", "tunelo.net", "--tunnel-addr", "0.0.0.0:4433", "--http-addr", "0.0.0.0:8080"]
+    ports:
+      - "8080:8080"       # HTTP (nginx proxies to this)
+      - "4433:4433/udp"   # QUIC tunnel
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=tunelo=info,tunelo_relay=info

@@ -1,13 +1,9 @@
 [package]
 name = "tunelo-relay"
-description = "Tunelo relay server — routes public HTTP to tunnel clients"
+description = "Tunelo relay — routes public HTTP to tunnel clients"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-
-[[bin]]
-name = "tunelo-relay"
-path = "src/main.rs"
 
 [dependencies]
 tunelo-protocol = { path = "../protocol" }
@@ -17,10 +13,8 @@ quinn = { workspace = true }
 rustls = { workspace = true }
 rcgen = { workspace = true }
 
-clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
 
 uuid = { workspace = true }
 rand = { workspace = true }

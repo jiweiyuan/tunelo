@@ -1,20 +1,19 @@
 #!/bin/bash
 # ============================================================
-# Step 4: Build and Deploy Tunelo
+# Deploy Tunelo to VPS
 # Run from your local machine (macOS)
 #
-# Deploys two separate web apps:
-#   - website/dist → /opt/tunelo/website  (tunelo.net landing page)
-#   - web/dist     → /opt/tunelo/web      (*.tunelo.net file explorer)
+#   tunelo relay    → /opt/tunelo/bin/tunelo (relay server)
+#   website/dist    → /opt/tunelo/website   (tunelo.net)
 # ============================================================
 set -euo pipefail
 
 VPS="ukvps"
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-echo "=== 1. Cross-compile tunelo-relay for aarch64-linux ==="
+echo "=== 1. Cross-compile tunelo for aarch64-linux ==="
 cd "$PROJECT_DIR"
-cargo build --release --target aarch64-unknown-linux-musl --bin tunelo-relay
+cargo build --release --target aarch64-unknown-linux-musl --bin tunelo
 
 echo ""
 echo "=== 2. Build website (tunelo.net) ==="
@@ -24,8 +23,8 @@ pnpm build
 
 echo ""
 echo "=== 3. Upload binary ==="
-scp "$PROJECT_DIR/target/aarch64-unknown-linux-musl/release/tunelo-relay" \
-    ${VPS}:/tmp/tunelo-relay
+scp "$PROJECT_DIR/target/aarch64-unknown-linux-musl/release/tunelo" \
+    ${VPS}:/tmp/tunelo
 
 echo ""
 echo "=== 4. Upload website ==="
@@ -41,16 +40,18 @@ echo "=== 6. Install on VPS ==="
 ssh ${VPS} bash -s <<'REMOTE'
 set -euo pipefail
 
-# Stop and remove old gateway service if exists
+# Stop and remove old services
 sudo systemctl stop tunelo-gateway 2>/dev/null || true
 sudo systemctl disable tunelo-gateway 2>/dev/null || true
 sudo rm -f /etc/systemd/system/tunelo-gateway.service
 sudo rm -f /opt/tunelo/bin/tunelo-gateway
+sudo systemctl stop tunelo-relay 2>/dev/null || true
+sudo rm -f /opt/tunelo/bin/tunelo-relay
 
 # Install binary
-sudo mv /tmp/tunelo-relay /opt/tunelo/bin/tunelo-relay
-sudo chmod +x /opt/tunelo/bin/tunelo-relay
-sudo chown tunelo:tunelo /opt/tunelo/bin/tunelo-relay
+sudo mv /tmp/tunelo /opt/tunelo/bin/tunelo
+sudo chmod +x /opt/tunelo/bin/tunelo
+sudo chown tunelo:tunelo /opt/tunelo/bin/tunelo
 
 # Install website
 sudo mkdir -p /opt/tunelo/website
@@ -80,6 +81,6 @@ REMOTE
 echo ""
 echo "=== Deploy complete! ==="
 echo ""
-echo "  https://tunelo.net              → Landing page"
+echo "  https://tunelo.net              → Website"
 echo "  *.tunelo.net                    → Tunnel subdomains"
-echo "  tunelo http 3000 --relay tunelo.net:4433"
+echo "  tunelo http 3000                → Create a tunnel"

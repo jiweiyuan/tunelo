@@ -1,6 +1,6 @@
 [package]
-name = "tunelo-client"
-description = "Tunelo CLI client — expose local services through a public tunnel"
+name = "tunelo"
+description = "Expose anything to the internet — local ports, files, directories"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,6 +11,7 @@ path = "src/main.rs"
 
 [dependencies]
 tunelo-protocol = { path = "../protocol" }
+tunelo-relay = { path = "../relay" }
 
 tokio = { workspace = true }
 quinn = { workspace = true }

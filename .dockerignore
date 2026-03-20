@@ -1,0 +1,10 @@
+target/
+node_modules/
+dist/
+website/
+web/node_modules/
+web/dist/
+.git/
+*.md
+deploy/
+skills/

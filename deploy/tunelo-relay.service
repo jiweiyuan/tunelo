@@ -7,13 +7,13 @@ Wants=network-online.target
 Type=simple
 User=tunelo
 Group=tunelo
-ExecStart=/opt/tunelo/bin/tunelo-relay \
+ExecStart=/opt/tunelo/bin/tunelo relay \
     --domain tunelo.net \
     --tunnel-addr 0.0.0.0:4433 \
     --http-addr 127.0.0.1:8080
 Restart=always
 RestartSec=5
-Environment=RUST_LOG=tunelo_relay=info
+Environment=RUST_LOG=tunelo=info,tunelo_relay=info
 
 # Security hardening
 NoNewPrivileges=true

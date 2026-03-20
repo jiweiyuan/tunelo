@@ -36,7 +36,7 @@ export default function App() {
   Public URL:  https://abc123.tunelo.net
   Forwarding:  → http://localhost:3000`}</CodeBlock>
 
-      <CodeBlock lang="bash" showLineNumbers={false}>{`$ tunelo .
+      <CodeBlock lang="bash" showLineNumbers={false}>{`$ tunelo serve .
   ▸ Serving /Users/you/project on :51234
   ✔ Tunnel is ready!
 
@@ -70,23 +70,23 @@ export default function App() {
 
       <Section id="file-server" title="File server">
         <P>
-          Run <Code>tunelo .</Code> or <Code>tunelo ./dist</Code> and tunelo starts a <strong>built-in file server</strong> with a React web explorer — embedded directly in the binary. Browse directories, preview files, share them through a public URL. No nginx, no Python server, no external dependencies.
+          Run <Code>tunelo serve .</Code> or <Code>tunelo serve ./dist</Code> and tunelo starts a <strong>built-in file server</strong> with a React web explorer — embedded directly in the binary. Browse directories, preview files, share them through a public URL. No nginx, no Python server, no external dependencies.
         </P>
 
         <CodeBlock lang="bash">{`# Serve current directory through a tunnel
-tunelo .
+tunelo serve .
 
 # Serve a specific directory
-tunelo ./dist
+tunelo serve ./dist
 
 # Local-only preview (no tunnel)
-tunelo . --local
+tunelo serve . --local
 
 # Local preview on a specific port
-tunelo . -l -p 8000
+tunelo serve . -l -p 8000
 
 # With custom subdomain
-tunelo . --subdomain files`}</CodeBlock>
+tunelo serve . --subdomain files`}</CodeBlock>
 
         <P>The web explorer supports:</P>
         <List>
@@ -100,7 +100,7 @@ tunelo . --subdomain files`}</CodeBlock>
         </List>
 
         <P>
-          The frontend is compiled into the binary at build time via <Code>include_dir!</Code>. The file server API is two endpoints: <Code>/_api/ls</Code> for directory listings and <Code>/_api/raw</Code> for file content. Everything else serves the SPA.
+          The frontend is compiled into the binary at build time via <Code>include_dir!</Code>. One binary — client, file server, and relay all in one. The file server API is two endpoints: <Code>/_api/ls</Code> for directory listings and <Code>/_api/raw</Code> for file content. Everything else serves the SPA.
         </P>
 
         <Caption>One binary. File server + web explorer + tunnel. No setup.</Caption>
@@ -143,22 +143,22 @@ tunelo http 3000 --private
 tunelo http 3000 --code mysecret
 
 # File mode — serve files with web explorer
-tunelo .
-tunelo ./dist
-tunelo . --subdomain files
-tunelo . --local
-tunelo . -l -p 8000`}</CodeBlock>
+tunelo serve .
+tunelo serve ./dist
+tunelo serve . --subdomain files
+tunelo serve . --local
+tunelo serve . -l -p 8000`}</CodeBlock>
 
         <P>Relay configuration:</P>
 
         <CodeBlock lang="bash">{`# Start with defaults
-tunelo-relay
+tunelo relay
 
 # Production deployment
-tunelo-relay --domain tunelo.net
+tunelo relay --domain tunelo.net
 
 # Custom addresses
-tunelo-relay --tunnel-addr 0.0.0.0:4433 --http-addr 0.0.0.0:80`}</CodeBlock>
+tunelo relay --tunnel-addr 0.0.0.0:4433 --http-addr 0.0.0.0:80`}</CodeBlock>
 
         <Caption>Client: one binary, one command. Relay: three flags.</Caption>
       </Section>
@@ -169,10 +169,10 @@ tunelo-relay --tunnel-addr 0.0.0.0:4433 --http-addr 0.0.0.0:80`}</CodeBlock>
         </P>
 
         <CodeBlock lang="bash">{`# Build the relay
-cargo build --release --bin tunelo-relay
+cargo build --release --bin tunelo
 
 # Run it
-./target/release/tunelo-relay --domain yourdomain.com
+./target/release/tunelo relay --domain yourdomain.com
 
 # Point your clients to it
 tunelo http 3000 --relay yourdomain.com:4433`}</CodeBlock>

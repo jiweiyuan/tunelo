@@ -1428,7 +1428,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tunelo-client"
+name = "tunelo"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1449,6 +1449,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "tunelo-protocol",
+ "tunelo-relay",
 ]
 
 [[package]]
@@ -1469,7 +1470,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base62",
- "clap",
  "dashmap",
  "httparse",
  "names",
@@ -1480,7 +1480,6 @@ dependencies = [
  "scopeguard",
  "tokio",
  "tracing",
- "tracing-subscriber",
  "tunelo-protocol",
  "uuid",
 ]

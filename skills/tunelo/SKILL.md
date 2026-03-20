@@ -10,7 +10,7 @@ description: Expose anything to the internet — local ports, files, directories
 tunelo http 3000
 
 # Serve a directory with built-in web explorer
-tunelo .
+tunelo serve .
 
 # Output:
 #   ✔ Tunnel is ready!
@@ -43,11 +43,11 @@ tunelo http <PORT> --code mysecret          # Private tunnel (specific code)
 ### Serve files (file mode)
 
 ```bash
-tunelo .                                    # Serve current directory
-tunelo ./dist                               # Serve a specific directory
-tunelo . --subdomain files                  # With custom subdomain
-tunelo . --local                            # Local-only preview (no tunnel)
-tunelo . -l -p 8000                         # Local preview on port 8000
+tunelo serve .                                    # Serve current directory
+tunelo serve ./dist                               # Serve a specific directory
+tunelo serve . --subdomain files                  # With custom subdomain
+tunelo serve . --local                            # Local-only preview (no tunnel)
+tunelo serve . -l -p 8000                         # Local preview on port 8000
 ```
 
 File mode starts a built-in web explorer with directory browsing, code highlighting, markdown rendering, PDF/image/video/audio viewers, and CSV/Excel tables. The frontend is embedded in the binary.
@@ -59,10 +59,10 @@ File mode starts a built-in web explorer with directory browsing, code highlight
 tunelo http 5173
 
 # Share project files with a colleague
-tunelo . --subdomain demo
+tunelo serve . --subdomain demo
 
 # Preview a static site locally
-tunelo ./dist --local
+tunelo serve ./dist --local
 
 # Expose an API with access control
 tunelo http 3001 --private
