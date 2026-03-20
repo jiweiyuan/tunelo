@@ -17,7 +17,6 @@ pub async fn run_tunnel(
     local_host: String,
     relay: String,
     access_code: Option<String>,
-    ttl_secs: u64,
 ) -> Result<()> {
     let conn = connect(&relay).await?;
     info!(relay = %relay, "connected");
@@ -29,18 +28,13 @@ pub async fn run_tunnel(
         &ClientControl::Register {
             version: PROTOCOL_VERSION,
             access_code: access_code.clone(),
-            ttl_secs,
         },
     )
     .await?;
 
     let resp: RelayControl = read_message(&mut rx).await?;
-    let (hostname, tunnel_id, granted_ttl) = match resp {
-        RelayControl::Registered {
-            hostname,
-            tunnel_id,
-            ttl_secs,
-        } => (hostname, tunnel_id, ttl_secs),
+    let (hostname, tunnel_id) = match resp {
+        RelayControl::Registered { hostname, tunnel_id } => (hostname, tunnel_id),
         RelayControl::Error { code, message } => {
             bail!("relay error ({code}): {message}");
         }
@@ -48,7 +42,6 @@ pub async fn run_tunnel(
     };
 
     // ── Print the URL ──────────────────────────────────────────────────
-    let ttl_display = format_duration(granted_ttl);
     println!();
     println!("  \x1b[32m✔\x1b[0m Tunnel is ready!");
     println!();
@@ -60,13 +53,11 @@ pub async fn run_tunnel(
     }
     println!("  Forwarding:  → http://{local_host}:{port}");
     println!("  Tunnel ID:   {tunnel_id}");
-    println!("  Expires in:  {ttl_display}");
     println!();
 
     // ── Run ────────────────────────────────────────────────────────────
     let local_addr: Arc<str> = format!("{local_host}:{port}").into();
 
-    // Data loop: accept QUIC streams from relay, relay to localhost
     let conn2 = conn.clone();
     let addr2 = local_addr.clone();
     let data_handle = tokio::spawn(async move {
@@ -90,14 +81,14 @@ pub async fn run_tunnel(
         }
     });
 
-    // Control loop: heartbeats
+    // Control loop: heartbeats + server-initiated shutdown
     loop {
         match read_message::<RelayControl, _>(&mut rx).await {
             Ok(RelayControl::Heartbeat) => {
                 let _ = write_message(&mut tx, &ClientControl::HeartbeatAck).await;
             }
             Ok(RelayControl::Shutdown { reason }) => {
-                info!(%reason, "shutdown requested");
+                info!(%reason, "relay shutdown");
                 println!("\n  \x1b[33m⏱\x1b[0m  {reason}");
                 break;
             }
@@ -116,18 +107,6 @@ pub async fn run_tunnel(
     data_handle.abort();
     println!("  Tunnel closed.");
     Ok(())
-}
-
-fn format_duration(secs: u64) -> String {
-    let h = secs / 3600;
-    let m = (secs % 3600) / 60;
-    if h > 0 && m > 0 {
-        format!("{h}h {m}m")
-    } else if h > 0 {
-        format!("{h}h")
-    } else {
-        format!("{m}m")
-    }
 }
 
 /// Connect to the relay via QUIC.
@@ -170,7 +149,6 @@ async fn connect(relay: &str) -> Result<quinn::Connection> {
         .context("QUIC connect")
 }
 
-/// Accept any server cert (dev/self-hosted mode).
 #[derive(Debug)]
 struct InsecureVerifier;
 

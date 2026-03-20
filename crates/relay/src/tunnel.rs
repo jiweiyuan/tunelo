@@ -1,11 +1,9 @@
 //! QUIC tunnel listener — accepts connections from tunelo clients.
 //!
-//! Flow:
-//! 1. Accept QUIC connection
-//! 2. Accept control stream → Register → Registered (with random subdomain)
-//! 3. Heartbeat loop with TTL countdown
-//! 4. Auto-disconnect when TTL expires
-//! 5. Cleanup routing table on exit
+//! - Random subdomain only (no custom subdomains)
+//! - Server-side max session duration (silent, not exposed to client)
+//! - Heartbeat loop with session timer
+//! - Auto-disconnect when session expires
 
 use std::sync::Arc;
 
@@ -25,10 +23,11 @@ pub async fn run_tunnel_listener(
     server_config: quinn::ServerConfig,
     router: Arc<Router>,
     domain: String,
-    max_ttl: u64,
+    max_session: u64,
 ) -> Result<()> {
     let endpoint = quinn::Endpoint::server(server_config, addr.parse()?)?;
-    info!(addr = %addr, max_ttl_secs = max_ttl, "QUIC tunnel listener started");
+    let session_display = if max_session == 0 { "unlimited".into() } else { format_duration(max_session) };
+    info!(addr = %addr, max_session = %session_display, "QUIC tunnel listener started");
 
     while let Some(incoming) = endpoint.accept().await {
         let router = router.clone();
@@ -40,7 +39,7 @@ pub async fn run_tunnel_listener(
                     Ok(conn) => {
                         info!("connected");
                         if let Err(e) =
-                            handle_connection(conn, &router, &domain, max_ttl).await
+                            handle_connection(conn, &router, &domain, max_session).await
                         {
                             warn!(error = %e, "tunnel ended");
                         }
@@ -55,23 +54,18 @@ pub async fn run_tunnel_listener(
     Ok(())
 }
 
-/// Handle one tunnel connection: handshake → heartbeat loop with TTL → cleanup.
 async fn handle_connection(
     conn: quinn::Connection,
     router: &Router,
     domain: &str,
-    max_ttl: u64,
+    max_session: u64,
 ) -> Result<()> {
     let (mut tx, mut rx) = conn.accept_bi().await.context("accept control stream")?;
 
     // ── Handshake ──────────────────────────────────────────────────────
     let register: ClientControl = read_message(&mut rx).await.context("read Register")?;
-    let (version, access_code, requested_ttl) = match register {
-        ClientControl::Register {
-            version,
-            access_code,
-            ttl_secs,
-        } => (version, access_code, ttl_secs),
+    let (version, access_code) = match register {
+        ClientControl::Register { version, access_code } => (version, access_code),
         _ => {
             send_error(&mut tx, 1000, "expected Register").await;
             bail!("unexpected first message");
@@ -88,10 +82,7 @@ async fn handle_connection(
         bail!("version mismatch");
     }
 
-    // Cap TTL to server max
-    let granted_ttl = requested_ttl.min(max_ttl);
-
-    // Always assign a random subdomain (no custom subdomains on public relay)
+    // Always random subdomain
     let subdomain = router.generate_subdomain();
     let hostname = format!("{subdomain}.{domain}");
     let tunnel_id = uuid::Uuid::new_v4().to_string();
@@ -105,7 +96,6 @@ async fn handle_connection(
         access_code,
     });
 
-    // Ensure cleanup on any exit path
     let _guard = scopeguard::guard((), |_| {
         router.remove(&subdomain);
     });
@@ -115,31 +105,34 @@ async fn handle_connection(
         &RelayControl::Registered {
             hostname: hostname.clone(),
             tunnel_id,
-            ttl_secs: granted_ttl,
         },
     )
     .await?;
+    info!(hostname = %hostname, is_private, "tunnel active");
 
-    let ttl_display = format_duration(granted_ttl);
-    info!(hostname = %hostname, is_private, ttl = %ttl_display, "tunnel active");
-
-    // ── Heartbeat loop with TTL ────────────────────────────────────────
+    // ── Heartbeat loop with session timer ──────────────────────────────
     let mut tick = interval(Duration::from_secs(30));
-    let deadline = Instant::now() + Duration::from_secs(granted_ttl);
+    let deadline = if max_session > 0 {
+        Some(Instant::now() + Duration::from_secs(max_session))
+    } else {
+        None
+    };
 
     loop {
         tokio::select! {
             _ = tick.tick() => {
-                // Check TTL
-                if Instant::now() >= deadline {
-                    info!(hostname = %hostname, "TTL expired, shutting down tunnel");
-                    let _ = write_message(
-                        &mut tx,
-                        &RelayControl::Shutdown {
-                            reason: format!("Tunnel expired after {ttl_display}"),
-                        },
-                    ).await;
-                    break;
+                if let Some(dl) = deadline {
+                    if Instant::now() >= dl {
+                        let dur = format_duration(max_session);
+                        info!(hostname = %hostname, "session expired after {dur}");
+                        let _ = write_message(
+                            &mut tx,
+                            &RelayControl::Shutdown {
+                                reason: format!("Session expired ({dur}). Reconnect to start a new one."),
+                            },
+                        ).await;
+                        break;
+                    }
                 }
                 if write_message(&mut tx, &RelayControl::Heartbeat).await.is_err() {
                     break;
@@ -164,22 +157,15 @@ async fn handle_connection(
 fn format_duration(secs: u64) -> String {
     let h = secs / 3600;
     let m = (secs % 3600) / 60;
-    if h > 0 && m > 0 {
-        format!("{h}h {m}m")
-    } else if h > 0 {
-        format!("{h}h")
-    } else {
-        format!("{m}m")
-    }
+    if h > 0 && m > 0 { format!("{h}h{m}m") }
+    else if h > 0 { format!("{h}h") }
+    else { format!("{m}m") }
 }
 
 async fn send_error(tx: &mut quinn::SendStream, code: u16, msg: &str) {
     let _ = write_message(
         tx,
-        &RelayControl::Error {
-            code,
-            message: msg.into(),
-        },
+        &RelayControl::Error { code, message: msg.into() },
     )
     .await;
 }

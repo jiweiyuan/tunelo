@@ -46,10 +46,6 @@ enum Command {
         /// Make tunnel private with a specific access code.
         #[clap(long, conflicts_with = "private")]
         code: Option<String>,
-
-        /// Tunnel time-to-live (e.g. "2h", "30m", "24h"). Default: 2h, max: 24h.
-        #[clap(long, default_value = "2h")]
-        ttl: String,
     },
 
     /// Serve files with the built-in web explorer.
@@ -77,10 +73,6 @@ enum Command {
         /// Make tunnel private with a specific access code.
         #[clap(long, conflicts_with = "private")]
         code: Option<String>,
-
-        /// Tunnel time-to-live (e.g. "2h", "30m", "24h"). Default: 2h, max: 24h.
-        #[clap(long, default_value = "2h")]
-        ttl: String,
     },
 
     /// Start the relay server.
@@ -97,9 +89,9 @@ enum Command {
         #[clap(long, default_value = "0.0.0.0:8080")]
         http_addr: String,
 
-        /// Maximum tunnel TTL in seconds. Clients cannot exceed this.
-        #[clap(long, default_value = "86400")]
-        max_ttl: u64,
+        /// Maximum tunnel session duration in seconds (0 = no limit).
+        #[clap(long, default_value = "7200")]
+        max_session: u64,
     },
 }
 
@@ -116,31 +108,18 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::Http {
-            port,
-            relay,
-            local_host,
-            private,
-            code,
-            ttl,
+            port, relay, local_host, private, code,
         } => {
             let access_code = resolve_access_code(private, code);
-            let ttl_secs = parse_ttl(&ttl)?;
-            tunnel::run_tunnel(port, local_host, relay, access_code, ttl_secs).await
+            tunnel::run_tunnel(port, local_host, relay, access_code).await
         }
 
         Command::Serve {
-            path,
-            local,
-            port,
-            relay,
-            private,
-            code,
-            ttl,
+            path, local, port, relay, private, code,
         } => {
             if !path.exists() {
                 bail!("Path '{}' does not exist", path.display());
             }
-
             let access_code = resolve_access_code(private, code);
 
             if local {
@@ -157,71 +136,25 @@ async fn main() -> Result<()> {
                 println!("\n  Stopped.");
                 Ok(())
             } else {
-                let ttl_secs = parse_ttl(&ttl)?;
                 let display = path.canonicalize().unwrap_or(path.clone());
                 let port = fileserver::start_background(path).await?;
                 println!("  \x1b[90m▸ Serving {} on :{port}\x1b[0m", display.display());
-                tunnel::run_tunnel(port, "127.0.0.1".into(), relay, access_code, ttl_secs).await
+                tunnel::run_tunnel(port, "127.0.0.1".into(), relay, access_code).await
             }
         }
 
         Command::Relay {
-            domain,
-            tunnel_addr,
-            http_addr,
-            max_ttl,
+            domain, tunnel_addr, http_addr, max_session,
         } => {
-            tunelo_relay::run(domain, tunnel_addr, http_addr, max_ttl).await
+            tunelo_relay::run(domain, tunnel_addr, http_addr, max_session).await
         }
     }
 }
 
-/// Resolve access code from --private / --code flags.
 fn resolve_access_code(private: bool, code: Option<String>) -> Option<String> {
-    if private {
-        Some(generate_code())
-    } else {
-        code
-    }
+    if private { Some(generate_code()) } else { code }
 }
 
-/// Parse TTL string like "2h", "30m", "1h30m", "86400" into seconds.
-fn parse_ttl(s: &str) -> Result<u64> {
-    // Try plain seconds
-    if let Ok(secs) = s.parse::<u64>() {
-        return Ok(secs);
-    }
-
-    let mut total = 0u64;
-    let mut num = String::new();
-    for c in s.chars() {
-        match c {
-            '0'..='9' => num.push(c),
-            'h' | 'H' => {
-                total += num.parse::<u64>().unwrap_or(0) * 3600;
-                num.clear();
-            }
-            'm' | 'M' => {
-                total += num.parse::<u64>().unwrap_or(0) * 60;
-                num.clear();
-            }
-            's' | 'S' => {
-                total += num.parse::<u64>().unwrap_or(0);
-                num.clear();
-            }
-            _ => bail!("Invalid TTL format: '{}'. Use e.g. '2h', '30m', '1h30m'", s),
-        }
-    }
-    if !num.is_empty() {
-        total += num.parse::<u64>().unwrap_or(0);
-    }
-    if total == 0 {
-        bail!("TTL must be > 0");
-    }
-    Ok(total)
-}
-
-/// Generate a short, human-friendly access code like "fox7291".
 fn generate_code() -> String {
     const WORDS: &[&str] = &[
         "sun", "moon", "star", "sky", "lake", "fox", "oak", "elm",

@@ -15,8 +15,8 @@ use anyhow::Result;
 use tracing::info;
 
 /// Start the relay server.
-pub async fn run(domain: String, tunnel_addr: String, http_addr: String, max_ttl: u64) -> Result<()> {
-    info!(domain = %domain, tunnel = %tunnel_addr, http = %http_addr, max_ttl_secs = max_ttl, "starting relay");
+pub async fn run(domain: String, tunnel_addr: String, http_addr: String, max_session: u64) -> Result<()> {
+    info!(domain = %domain, tunnel = %tunnel_addr, http = %http_addr, max_session_secs = max_session, "starting relay");
 
     let router = Arc::new(router::Router::new());
     let quic_config = tls::build_quic_server_config()?;
@@ -25,7 +25,7 @@ pub async fn run(domain: String, tunnel_addr: String, http_addr: String, max_ttl
     let t_addr = tunnel_addr.clone();
     let d = domain.clone();
     let tunnel_task = tokio::spawn(async move {
-        tunnel::run_tunnel_listener(t_addr, quic_config, r1, d, max_ttl).await
+        tunnel::run_tunnel_listener(t_addr, quic_config, r1, d, max_session).await
     });
 
     let r2 = router.clone();

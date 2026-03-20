@@ -10,19 +10,11 @@ pub enum ClientControl {
         /// Protocol version for compatibility checking.
         version: u8,
         /// Optional access code for private tunnels.
-        /// If set, visitors must enter this code before accessing the tunnel.
         #[serde(default)]
         access_code: Option<String>,
-        /// Requested tunnel TTL in seconds. Relay may cap this.
-        #[serde(default = "default_ttl")]
-        ttl_secs: u64,
     },
     /// Response to a heartbeat ping from the relay.
     HeartbeatAck,
-}
-
-fn default_ttl() -> u64 {
-    7200 // 2 hours
 }
 
 /// Messages sent from the relay to the client on the control stream.
@@ -34,8 +26,6 @@ pub enum RelayControl {
         hostname: String,
         /// Unique tunnel session ID.
         tunnel_id: String,
-        /// Actual TTL granted by relay (may be less than requested).
-        ttl_secs: u64,
     },
     /// Registration or protocol error.
     Error { code: u16, message: String },
@@ -52,6 +42,6 @@ pub mod error_codes {
     pub const INVALID_SUBDOMAIN: u16 = 1002;
     pub const VERSION_MISMATCH: u16 = 1003;
     pub const SERVER_FULL: u16 = 1004;
-    pub const TTL_EXCEEDED: u16 = 1005;
+
     pub const INTERNAL_ERROR: u16 = 1500;
 }
