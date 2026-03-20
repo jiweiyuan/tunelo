@@ -10,7 +10,7 @@ members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/tunelo/tunelo"
+repository = "https://github.com/jiweiyuan/tunelo"
 
 [workspace.dependencies]
 # Async runtime
