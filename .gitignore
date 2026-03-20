@@ -5,6 +5,9 @@ target/
 skills/DEPLOY.md
 skills/TEST.md
 
+# Promotion materials
+promotion/
+
 # Node
 node_modules/
 dist/
