@@ -129,10 +129,15 @@ export default function Explorer() {
         maxWidth: 1120, margin: "0 auto", padding: "0 24px 24px",
         display: "flex", justifyContent: "flex-end", alignItems: "center",
       }}>
-        <span style={{ fontSize: 12, color: "var(--dropbox-gray-500)" }}>
+        <a
+          href="https://tunelo.net"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontSize: 12, color: "var(--dropbox-gray-500)", textDecoration: "none" }}
+        >
           Served by{" "}
           <span style={{ fontWeight: 600, color: "var(--dropbox-blue)" }}>tunelo</span>
-        </span>
+        </a>
       </div>
     </div>
   );

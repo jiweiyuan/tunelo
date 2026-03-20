@@ -1,8 +1,12 @@
 //! Tunnel connection management — QUIC connection to the relay.
+//!
+//! Auto-reconnects with exponential backoff on disconnect.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
+use tokio::time::sleep;
 use tracing::{error, info, info_span, warn, Instrument};
 
 use tunelo_protocol::{
@@ -11,14 +15,61 @@ use tunelo_protocol::{
 
 use crate::proxy;
 
-/// Establish tunnel and serve requests.
+const MAX_BACKOFF: Duration = Duration::from_secs(30);
+const INITIAL_BACKOFF: Duration = Duration::from_secs(1);
+
+/// Establish tunnel and serve requests. Auto-reconnects on disconnect.
 pub async fn run_tunnel(
     port: u16,
     local_host: String,
     relay: String,
     access_code: Option<String>,
 ) -> Result<()> {
-    let conn = connect(&relay).await?;
+    let local_addr: Arc<str> = format!("{local_host}:{port}").into();
+    let mut backoff = INITIAL_BACKOFF;
+    let mut first = true;
+
+    loop {
+        match run_once(&relay, &access_code, &local_addr, first).await {
+            Ok(SessionEnd::Shutdown(reason)) => {
+                // Server explicitly told us to stop (e.g. session expired)
+                println!("\n  \x1b[33m⏱\x1b[0m  {reason}");
+                println!("  Tunnel closed.");
+                return Ok(());
+            }
+            Ok(SessionEnd::Disconnected) => {
+                println!("\n  \x1b[33m⟳\x1b[0m  Disconnected. Reconnecting in {}s...", backoff.as_secs());
+                sleep(backoff).await;
+                backoff = (backoff * 2).min(MAX_BACKOFF);
+                first = false;
+            }
+            Err(e) => {
+                if first {
+                    // First connection failed — probably wrong address, bail
+                    return Err(e);
+                }
+                warn!(error = %e, "connection failed, retrying in {}s", backoff.as_secs());
+                println!("  \x1b[33m⟳\x1b[0m  Connection failed. Retrying in {}s...", backoff.as_secs());
+                sleep(backoff).await;
+                backoff = (backoff * 2).min(MAX_BACKOFF);
+            }
+        }
+    }
+}
+
+enum SessionEnd {
+    Shutdown(String),
+    Disconnected,
+}
+
+/// Run a single tunnel session. Returns when disconnected or shut down.
+async fn run_once(
+    relay: &str,
+    access_code: &Option<String>,
+    local_addr: &Arc<str>,
+    first: bool,
+) -> Result<SessionEnd> {
+    let conn = connect(relay).await?;
     info!(relay = %relay, "connected");
 
     // ── Handshake ──────────────────────────────────────────────────────
@@ -42,8 +93,12 @@ pub async fn run_tunnel(
     };
 
     // ── Print the URL ──────────────────────────────────────────────────
-    println!();
-    println!("  \x1b[32m✔\x1b[0m Tunnel is ready!");
+    if first {
+        println!();
+        println!("  \x1b[32m✔\x1b[0m Tunnel is ready!");
+    } else {
+        println!("  \x1b[32m✔\x1b[0m Reconnected!");
+    }
     println!();
     if let Some(ref code) = access_code {
         println!("  Share URL:   \x1b[1;36mhttps://{hostname}?pwd={code}\x1b[0m");
@@ -51,13 +106,11 @@ pub async fn run_tunnel(
     } else {
         println!("  Public URL:  \x1b[1;36mhttps://{hostname}\x1b[0m");
     }
-    println!("  Forwarding:  → http://{local_host}:{port}");
+    println!("  Forwarding:  → http://{local_addr}");
     println!("  Tunnel ID:   {tunnel_id}");
     println!();
 
-    // ── Run ────────────────────────────────────────────────────────────
-    let local_addr: Arc<str> = format!("{local_host}:{port}").into();
-
+    // ── Data loop ──────────────────────────────────────────────────────
     let conn2 = conn.clone();
     let addr2 = local_addr.clone();
     let data_handle = tokio::spawn(async move {
@@ -81,32 +134,36 @@ pub async fn run_tunnel(
         }
     });
 
-    // Control loop: heartbeats + server-initiated shutdown
-    loop {
-        match read_message::<RelayControl, _>(&mut rx).await {
-            Ok(RelayControl::Heartbeat) => {
+    // ── Control loop with heartbeat timeout ─────────────────────────────
+    // Relay sends heartbeat every 30s. If we don't hear anything in 90s,
+    // the relay is gone (restarted, network issue, etc).
+    let heartbeat_timeout = Duration::from_secs(90);
+    let result = loop {
+        match tokio::time::timeout(heartbeat_timeout, read_message::<RelayControl, _>(&mut rx)).await {
+            Ok(Ok(RelayControl::Heartbeat)) => {
                 let _ = write_message(&mut tx, &ClientControl::HeartbeatAck).await;
             }
-            Ok(RelayControl::Shutdown { reason }) => {
-                info!(%reason, "relay shutdown");
-                println!("\n  \x1b[33m⏱\x1b[0m  {reason}");
-                break;
+            Ok(Ok(RelayControl::Shutdown { reason })) => {
+                break SessionEnd::Shutdown(reason);
             }
-            Ok(RelayControl::Error { code, message }) => {
+            Ok(Ok(RelayControl::Error { code, message })) => {
                 error!(code, %message, "relay error");
-                break;
+                break SessionEnd::Disconnected;
             }
-            Ok(_) => {}
-            Err(_) => {
+            Ok(Ok(_)) => {}
+            Ok(Err(_)) => {
                 info!("control stream closed");
-                break;
+                break SessionEnd::Disconnected;
+            }
+            Err(_) => {
+                warn!("heartbeat timeout — relay not responding");
+                break SessionEnd::Disconnected;
             }
         }
-    }
+    };
 
     data_handle.abort();
-    println!("  Tunnel closed.");
-    Ok(())
+    Ok(result)
 }
 
 /// Connect to the relay via QUIC.
