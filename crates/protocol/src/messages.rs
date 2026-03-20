@@ -1,17 +1,6 @@
 //! Protocol messages exchanged between client and relay.
-//!
-//! Design inspired by bore's ClientMessage/ServerMessage enum pattern,
-//! but extended for hostname-based routing (like frp/cloudflared).
-//!
-//! Key design principle: control messages use structured serialization,
-//! but the data plane streams raw bytes with zero parsing overhead.
 
 use serde::{Deserialize, Serialize};
-
-// ─── Control Stream Messages ─────────────────────────────────────────────────
-//
-// These are exchanged on the first QUIC bidi stream (the "control stream").
-// Low frequency — one Register at startup, then periodic heartbeats.
 
 /// Messages sent from the client to the relay on the control stream.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -20,16 +9,20 @@ pub enum ClientControl {
     Register {
         /// Protocol version for compatibility checking.
         version: u8,
-        /// Optional desired subdomain. If None, server assigns a random one.
-        requested_subdomain: Option<String>,
-        /// Optional access code for private tunnels (like a Zoom meeting password).
+        /// Optional access code for private tunnels.
         /// If set, visitors must enter this code before accessing the tunnel.
-        /// The relay serves an auth page and sets a cookie after validation.
         #[serde(default)]
         access_code: Option<String>,
+        /// Requested tunnel TTL in seconds. Relay may cap this.
+        #[serde(default = "default_ttl")]
+        ttl_secs: u64,
     },
     /// Response to a heartbeat ping from the relay.
     HeartbeatAck,
+}
+
+fn default_ttl() -> u64 {
+    7200 // 2 hours
 }
 
 /// Messages sent from the relay to the client on the control stream.
@@ -41,6 +34,8 @@ pub enum RelayControl {
         hostname: String,
         /// Unique tunnel session ID.
         tunnel_id: String,
+        /// Actual TTL granted by relay (may be less than requested).
+        ttl_secs: u64,
     },
     /// Registration or protocol error.
     Error { code: u16, message: String },
@@ -50,14 +45,6 @@ pub enum RelayControl {
     Shutdown { reason: String },
 }
 
-// ─── Data Streams ────────────────────────────────────────────────────────────
-//
-// Data streams carry raw HTTP bytes with ZERO parsing on the tunnel path.
-// The relay peeks at the Host header *before* opening the QUIC stream,
-// then blindly relays all bytes. No protocol messages on data streams at all.
-//
-// This is the key performance insight: the tunnel is a transparent byte pipe.
-
 // ─── Error Codes ─────────────────────────────────────────────────────────────
 
 pub mod error_codes {
@@ -65,5 +52,6 @@ pub mod error_codes {
     pub const INVALID_SUBDOMAIN: u16 = 1002;
     pub const VERSION_MISMATCH: u16 = 1003;
     pub const SERVER_FULL: u16 = 1004;
+    pub const TTL_EXCEEDED: u16 = 1005;
     pub const INTERNAL_ERROR: u16 = 1500;
 }

@@ -35,10 +35,6 @@ enum Command {
         #[clap(short, long, env = "TUNELO_RELAY", default_value = "tunelo.net:4433")]
         relay: String,
 
-        /// Request a specific subdomain.
-        #[clap(short, long)]
-        subdomain: Option<String>,
-
         /// Local host to forward to.
         #[clap(short = 'H', long, default_value = "localhost")]
         local_host: String,
@@ -50,6 +46,10 @@ enum Command {
         /// Make tunnel private with a specific access code.
         #[clap(long, conflicts_with = "private")]
         code: Option<String>,
+
+        /// Tunnel time-to-live (e.g. "2h", "30m", "24h"). Default: 2h, max: 24h.
+        #[clap(long, default_value = "2h")]
+        ttl: String,
     },
 
     /// Serve files with the built-in web explorer.
@@ -70,10 +70,6 @@ enum Command {
         #[clap(short, long, env = "TUNELO_RELAY", default_value = "tunelo.net:4433")]
         relay: String,
 
-        /// Request a specific subdomain.
-        #[clap(short, long)]
-        subdomain: Option<String>,
-
         /// Make tunnel private (auto-generates an access code).
         #[clap(long, conflicts_with = "code")]
         private: bool,
@@ -81,6 +77,10 @@ enum Command {
         /// Make tunnel private with a specific access code.
         #[clap(long, conflicts_with = "private")]
         code: Option<String>,
+
+        /// Tunnel time-to-live (e.g. "2h", "30m", "24h"). Default: 2h, max: 24h.
+        #[clap(long, default_value = "2h")]
+        ttl: String,
     },
 
     /// Start the relay server.
@@ -96,6 +96,10 @@ enum Command {
         /// HTTP listener address for public browser connections.
         #[clap(long, default_value = "0.0.0.0:8080")]
         http_addr: String,
+
+        /// Maximum tunnel TTL in seconds. Clients cannot exceed this.
+        #[clap(long, default_value = "86400")]
+        max_ttl: u64,
     },
 }
 
@@ -114,13 +118,14 @@ async fn main() -> Result<()> {
         Command::Http {
             port,
             relay,
-            subdomain,
             local_host,
             private,
             code,
+            ttl,
         } => {
             let access_code = resolve_access_code(private, code);
-            tunnel::run_tunnel(port, local_host, relay, subdomain, access_code).await
+            let ttl_secs = parse_ttl(&ttl)?;
+            tunnel::run_tunnel(port, local_host, relay, access_code, ttl_secs).await
         }
 
         Command::Serve {
@@ -128,9 +133,9 @@ async fn main() -> Result<()> {
             local,
             port,
             relay,
-            subdomain,
             private,
             code,
+            ttl,
         } => {
             if !path.exists() {
                 bail!("Path '{}' does not exist", path.display());
@@ -152,10 +157,11 @@ async fn main() -> Result<()> {
                 println!("\n  Stopped.");
                 Ok(())
             } else {
+                let ttl_secs = parse_ttl(&ttl)?;
                 let display = path.canonicalize().unwrap_or(path.clone());
                 let port = fileserver::start_background(path).await?;
                 println!("  \x1b[90m▸ Serving {} on :{port}\x1b[0m", display.display());
-                tunnel::run_tunnel(port, "127.0.0.1".into(), relay, subdomain, access_code).await
+                tunnel::run_tunnel(port, "127.0.0.1".into(), relay, access_code, ttl_secs).await
             }
         }
 
@@ -163,8 +169,9 @@ async fn main() -> Result<()> {
             domain,
             tunnel_addr,
             http_addr,
+            max_ttl,
         } => {
-            tunelo_relay::run(domain, tunnel_addr, http_addr).await
+            tunelo_relay::run(domain, tunnel_addr, http_addr, max_ttl).await
         }
     }
 }
@@ -176,6 +183,42 @@ fn resolve_access_code(private: bool, code: Option<String>) -> Option<String> {
     } else {
         code
     }
+}
+
+/// Parse TTL string like "2h", "30m", "1h30m", "86400" into seconds.
+fn parse_ttl(s: &str) -> Result<u64> {
+    // Try plain seconds
+    if let Ok(secs) = s.parse::<u64>() {
+        return Ok(secs);
+    }
+
+    let mut total = 0u64;
+    let mut num = String::new();
+    for c in s.chars() {
+        match c {
+            '0'..='9' => num.push(c),
+            'h' | 'H' => {
+                total += num.parse::<u64>().unwrap_or(0) * 3600;
+                num.clear();
+            }
+            'm' | 'M' => {
+                total += num.parse::<u64>().unwrap_or(0) * 60;
+                num.clear();
+            }
+            's' | 'S' => {
+                total += num.parse::<u64>().unwrap_or(0);
+                num.clear();
+            }
+            _ => bail!("Invalid TTL format: '{}'. Use e.g. '2h', '30m', '1h30m'", s),
+        }
+    }
+    if !num.is_empty() {
+        total += num.parse::<u64>().unwrap_or(0);
+    }
+    if total == 0 {
+        bail!("TTL must be > 0");
+    }
+    Ok(total)
 }
 
 /// Generate a short, human-friendly access code like "fox7291".
