@@ -12,6 +12,7 @@ import {
 } from './components'
 
 const TOC = [
+  { label: 'Install', href: '#install' },
   { label: 'Quick start', href: '#quick-start' },
   { label: 'File server', href: '#file-server' },
   { label: 'How it works', href: '#how-it-works' },
@@ -46,6 +47,28 @@ export default function App() {
       <P>
         Other tunnel tools need config files, accounts, or dashboards. Tunelo is a <strong>single binary</strong> that does two things: expose a local port, or serve files with a built-in web explorer. QUIC transport gives you multiplexed, encrypted, low-latency tunneling. By default, the client connects to the public relay at <Code>tunelo.net</Code> — or point it at your own with <Code>--relay</Code>.
       </P>
+
+      <Section id="install" title="Install">
+        <P><strong>macOS / Linux:</strong></P>
+        <CodeBlock lang="bash" showLineNumbers={false}>{`curl -fsSL https://tunelo.net/install.sh | sh`}</CodeBlock>
+
+        <P><strong>Windows (PowerShell):</strong></P>
+        <CodeBlock lang="bash" showLineNumbers={false}>{`irm https://tunelo.net/install.ps1 | iex`}</CodeBlock>
+
+        <P>Supported platforms:</P>
+        <ComparisonTable
+          headers={['OS', 'Architecture', 'Binary']}
+          rows={[
+            ['Linux', 'x86_64 / arm64', 'tunelo-linux-amd64 / arm64'],
+            ['macOS', 'x86_64 / arm64', 'tunelo-macos-amd64 / arm64'],
+            ['Windows', 'x86_64', 'tunelo-windows-amd64.exe'],
+          ]}
+        />
+
+        <P>
+          Or download directly from <A href="https://github.com/jiweiyuan/tunelo/releases">GitHub Releases</A>.
+        </P>
+      </Section>
 
       <Section id="quick-start" title="Quick start">
         <P>
