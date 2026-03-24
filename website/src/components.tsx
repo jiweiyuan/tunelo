@@ -40,7 +40,7 @@ export function TableOfContents({ items }: { items: Array<{ label: string; href:
 
   return (
     <aside
-      className="fixed top-[80px] hidden lg:block"
+      className="fixed top-[110px] hidden lg:block"
       style={{ left: 'max(1rem, calc((100vw - 550px) / 2 - 200px))', width: '122px' }}
     >
       <nav>
@@ -99,44 +99,67 @@ function TopHeader() {
 
   return (
     <header
-      className="fixed top-0 left-0 right-0 z-50 flex items-center justify-end gap-3"
+      className="mx-auto flex items-center justify-between"
       style={{
-        height: '48px',
-        padding: '0 20px',
+        width: '550px',
+        maxWidth: 'calc(100% - 2rem)',
+        height: '40px',
+        padding: '0 16px',
+        marginTop: '56px',
+        border: '1px solid var(--page-border)',
+        borderRadius: '10px',
         background: 'var(--bg)',
-        borderBottom: '1px solid var(--divider)',
       }}
     >
-      <button
-        onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}
-        className="cursor-pointer"
-        style={{
-          fontSize: '13px', fontWeight: 500,
-          padding: '4px 10px',
-          color: 'var(--text-secondary)', fontFamily: 'var(--font-primary)',
-          transition: 'color 0.15s ease',
-          background: 'none', border: 'none',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
-      >
-        {t('switchLabel')}
-      </button>
       <a
-        href="https://github.com/jiweiyuan/tunelo"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center justify-center"
+        href="/"
+        className="no-underline"
         style={{
-          color: 'var(--text-secondary)',
+          fontSize: '14px', fontWeight: 700, letterSpacing: '-0.09px',
+          color: 'var(--text-primary)', fontFamily: 'var(--font-primary)',
           transition: 'color 0.15s ease',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
-        aria-label="GitHub"
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-hover)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
       >
-        <GitHubIcon />
+        tunelo
       </a>
+      <div className="flex items-center gap-1">
+        <a
+          href="https://github.com/jiweiyuan/tunelo"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 no-underline"
+          style={{
+            fontSize: '13px', fontWeight: 500,
+            padding: '4px 10px',
+            color: 'var(--text-secondary)', fontFamily: 'var(--font-primary)',
+            transition: 'color 0.15s ease',
+            borderRadius: '6px',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+        >
+          <GitHubIcon />
+          <span>GitHub</span>
+        </a>
+        <span style={{ width: '1px', height: '14px', background: 'var(--page-border)' }} />
+        <button
+          onClick={() => setLocale(locale === 'en' ? 'zh' : 'en')}
+          className="cursor-pointer"
+          style={{
+            fontSize: '13px', fontWeight: 500,
+            padding: '4px 10px',
+            color: 'var(--text-secondary)', fontFamily: 'var(--font-primary)',
+            transition: 'color 0.15s ease',
+            background: 'none', border: 'none',
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-secondary)' }}
+        >
+          {t('switchLabel')}
+        </button>
+      </div>
     </header>
   )
 }
@@ -372,10 +395,10 @@ export function EditorialPage({
       className="editorial-page relative min-h-screen overflow-x-hidden"
       style={{ background: 'var(--bg)', color: 'var(--text-primary)', fontFamily: 'var(--font-primary)' }}
     >
-      <TopHeader />
       <TableOfContents items={toc} />
+      <TopHeader />
       <div className="mx-auto" style={{ width: '550px', maxWidth: 'calc(100% - 2rem)', padding: '0 1rem 6rem' }}>
-        <div style={{ height: '80px' }} />
+        <div style={{ height: '24px' }} />
         <article className="flex flex-col gap-[32px]">{children}</article>
       </div>
     </div>
