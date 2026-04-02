@@ -1429,7 +1429,7 @@ dependencies = [
 
 [[package]]
 name = "tunelo"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1454,7 +1454,7 @@ dependencies = [
 
 [[package]]
 name = "tunelo-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bytes",
@@ -1466,7 +1466,7 @@ dependencies = [
 
 [[package]]
 name = "tunelo-relay"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "base62",
