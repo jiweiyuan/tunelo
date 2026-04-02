@@ -147,7 +147,7 @@ Only the control stream uses msgpack framing (registration + heartbeats).
 - HTTP/2 multiplexing over the tunnel connection (h2mux)
 
 **What Tunelo should borrow:**
-- The zero-config instant URL model: `tunelo http 3000` → get a URL
+- The zero-config instant URL model: `tunelo port 3000` → get a URL
 - The "public hostname bound to a live tunnel session" mental model
 - Outbound-only connection model
 - Multiplexed request forwarding over a single tunnel
@@ -255,7 +255,7 @@ This is conservative. Real-world Rust network services (e.g., Cloudflare's pingo
 
 ### 3.2 Connection Flow
 
-1. **Client starts:** `tunelo http 3000`
+1. **Client starts:** `tunelo port 3000`
 2. **Client connects:** Opens QUIC connection to `gateway.tunelo.net:4433`
 3. **Registration:** Client opens QUIC stream 0 (control stream), sends `Register { local_port: 3000 }` message
 4. **Gateway assigns hostname:** Gateway generates `abc123.tunelo.net`, stores mapping `abc123 → quic_connection`, replies with `Registered { hostname: "abc123.tunelo.net", tunnel_id: "..." }`
