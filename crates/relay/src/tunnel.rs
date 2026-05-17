@@ -1,6 +1,6 @@
 //! QUIC tunnel listener — accepts connections from tunelo clients.
 //!
-//! - Random subdomain only (no custom subdomains)
+//! - Clients may request a subdomain; falls back to random if taken or absent
 //! - Server-side max session duration (silent, not exposed to client)
 //! - Heartbeat loop with session timer
 //! - Auto-disconnect when session expires
@@ -64,8 +64,10 @@ async fn handle_connection(
 
     // ── Handshake ──────────────────────────────────────────────────────
     let register: ClientControl = read_message(&mut rx).await.context("read Register")?;
-    let (version, password) = match register {
-        ClientControl::Register { version, password } => (version, password),
+    let (version, password, requested_subdomain) = match register {
+        ClientControl::Register { version, password, requested_subdomain } => {
+            (version, password, requested_subdomain)
+        }
         _ => {
             send_error(&mut tx, 1000, "expected Register").await;
             bail!("unexpected first message");
@@ -82,8 +84,7 @@ async fn handle_connection(
         bail!("version mismatch");
     }
 
-    // Always random subdomain
-    let subdomain = router.generate_subdomain();
+    let subdomain = router.resolve_subdomain(requested_subdomain.as_deref());
     let hostname = format!("{subdomain}.{domain}");
     let tunnel_id = uuid::Uuid::new_v4().to_string();
     let is_private = password.is_some();

@@ -12,6 +12,9 @@ pub enum ClientControl {
         /// Optional password for private tunnels.
         #[serde(default, alias = "access_code")]
         password: Option<String>,
+        /// Request a specific subdomain (e.g. for reconnect stability).
+        #[serde(default)]
+        requested_subdomain: Option<String>,
     },
     /// Response to a heartbeat ping from the relay.
     HeartbeatAck,

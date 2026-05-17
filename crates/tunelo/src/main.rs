@@ -97,7 +97,7 @@ enum Command {
         http_addr: String,
 
         /// Maximum tunnel session duration in seconds (0 = no limit).
-        #[clap(long, default_value = "7200")]
+        #[clap(long, default_value = "86400")]
         max_session: u64,
     },
 }

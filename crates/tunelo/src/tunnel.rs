@@ -28,16 +28,18 @@ pub async fn run_tunnel(
     let local_addr: Arc<str> = format!("{local_host}:{port}").into();
     let mut backoff = INITIAL_BACKOFF;
     let mut first = true;
+    let mut last_subdomain: Option<String> = None;
 
     loop {
-        match run_once(&relay, &password, &local_addr, first).await {
+        match run_once(&relay, &password, &local_addr, first, &last_subdomain).await {
             Ok(SessionEnd::Shutdown(reason)) => {
                 // Server explicitly told us to stop (e.g. session expired)
                 println!("\n  {reason}");
                 println!("  Tunnel closed.");
                 return Ok(());
             }
-            Ok(SessionEnd::Disconnected) => {
+            Ok(SessionEnd::Disconnected(subdomain)) => {
+                last_subdomain = subdomain;
                 println!("\n  Disconnected. Reconnecting in {}s...", backoff.as_secs());
                 sleep(backoff).await;
                 backoff = (backoff * 2).min(MAX_BACKOFF);
@@ -59,7 +61,7 @@ pub async fn run_tunnel(
 
 enum SessionEnd {
     Shutdown(String),
-    Disconnected,
+    Disconnected(Option<String>),
 }
 
 /// Run a single tunnel session. Returns when disconnected or shut down.
@@ -68,6 +70,7 @@ async fn run_once(
     password: &Option<String>,
     local_addr: &Arc<str>,
     first: bool,
+    requested_subdomain: &Option<String>,
 ) -> Result<SessionEnd> {
     let conn = connect(relay).await?;
     info!(relay = %relay, "connected");
@@ -79,6 +82,7 @@ async fn run_once(
         &ClientControl::Register {
             version: PROTOCOL_VERSION,
             password: password.clone(),
+            requested_subdomain: requested_subdomain.clone(),
         },
     )
     .await?;
@@ -91,6 +95,9 @@ async fn run_once(
         }
         _ => bail!("unexpected response"),
     };
+
+    // Extract subdomain for reconnect stability
+    let subdomain = hostname.split('.').next().unwrap_or("").to_string();
 
     // ── Print the URL ──────────────────────────────────────────────────
     if first {
@@ -147,16 +154,16 @@ async fn run_once(
             }
             Ok(Ok(RelayControl::Error { code, message })) => {
                 error!(code, %message, "relay error");
-                break SessionEnd::Disconnected;
+                break SessionEnd::Disconnected(Some(subdomain.clone()));
             }
             Ok(Ok(_)) => {}
             Ok(Err(_)) => {
                 info!("control stream closed");
-                break SessionEnd::Disconnected;
+                break SessionEnd::Disconnected(Some(subdomain.clone()));
             }
             Err(_) => {
                 warn!("heartbeat timeout — relay not responding");
-                break SessionEnd::Disconnected;
+                break SessionEnd::Disconnected(Some(subdomain.clone()));
             }
         }
     };

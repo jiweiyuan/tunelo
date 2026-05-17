@@ -138,7 +138,7 @@ tunelo serve . -l -p 8000`}</CodeBlock>
 
       <Section id="how-it-works" title="How it works">
         <P>
-          The client opens a <strong>QUIC connection</strong> to the relay and gets a random subdomain. When a browser hits that URL, the relay peeks at the Host header, finds the matching tunnel, opens a QUIC stream, and does <Code>copy_bidirectional</Code> between the TCP socket and the QUIC stream. <strong>Zero HTTP parsing</strong> on the data path.
+          The client opens a <strong>QUIC connection</strong> to the relay and gets a subdomain. When a browser hits that URL, the relay peeks at the Host header, finds the matching tunnel, opens a QUIC stream, and does <Code>copy_bidirectional</Code> between the TCP socket and the QUIC stream. <strong>Zero HTTP parsing</strong> on the data path. On reconnect, the client re-requests the same subdomain — your URL stays stable across network disruptions.
         </P>
 
         <CodeBlock lang="bash" showLineNumbers={false}>{`Browser → HTTPS → Relay → QUIC stream → Client → localhost:3000

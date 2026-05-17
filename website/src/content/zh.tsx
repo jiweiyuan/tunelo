@@ -138,7 +138,7 @@ tunelo serve . -l -p 8000`}</CodeBlock>
 
       <Section id="how-it-works" title="工作原理">
         <P>
-          客户端向中继发起 <strong>QUIC 连接</strong>并获得一个随机子域名。当浏览器访问该 URL 时，中继会检查 Host 头部，找到匹配的隧道，打开一个 QUIC 流，在 TCP 套接字和 QUIC 流之间执行 <Code>copy_bidirectional</Code>。数据路径上<strong>零 HTTP 解析</strong>。
+          客户端向中继发起 <strong>QUIC 连接</strong>并获得一个子域名。当浏览器访问该 URL 时，中继会检查 Host 头部，找到匹配的隧道，打开一个 QUIC 流，在 TCP 套接字和 QUIC 流之间执行 <Code>copy_bidirectional</Code>。数据路径上<strong>零 HTTP 解析</strong>。断线重连时，客户端会自动请求之前的子域名 —— URL 在网络波动后保持不变。
         </P>
 
         <CodeBlock lang="bash" showLineNumbers={false}>{`浏览器 → HTTPS → 中继 → QUIC 流 → 客户端 → localhost:3000

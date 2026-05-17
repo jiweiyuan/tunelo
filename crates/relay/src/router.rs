@@ -68,10 +68,27 @@ impl Router {
         self.sessions.contains_key(subdomain)
     }
 
+    /// Resolve a subdomain: use the requested name if available, otherwise random.
+    /// Evicts stale sessions (dead QUIC connections) holding the requested name.
+    pub fn resolve_subdomain(&self, requested: Option<&str>) -> String {
+        if let Some(name) = requested.filter(|n| !n.is_empty()) {
+            match self.sessions.get(name) {
+                None => return name.to_string(),
+                Some(existing) if existing.connection.close_reason().is_some() => {
+                    drop(existing);
+                    self.remove(name);
+                    return name.to_string();
+                }
+                _ => {} // taken by a live session, fall through to random
+            }
+        }
+        self.generate_subdomain()
+    }
+
     /// Generate a unique subdomain like "swift-fox-3847".
     ///
     /// Pattern: adjective-noun-NNNN (4-digit suffix).
-    pub fn generate_subdomain(&self) -> String {
+    fn generate_subdomain(&self) -> String {
         let mut generator = Generator::default();
         loop {
             let num = rand::random::<u16>() % 10000;

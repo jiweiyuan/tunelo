@@ -64,6 +64,7 @@ mod tests {
         let msg = ClientControl::Register {
             version: 1,
             password: None,
+            requested_subdomain: None,
         };
         let mut buf = Vec::new();
         write_message(&mut buf, &msg).await.unwrap();
@@ -74,6 +75,7 @@ mod tests {
             ClientControl::Register {
                 version,
                 password,
+                ..
             } => {
                 assert_eq!(version, 1);
                 assert!(password.is_none());
@@ -87,6 +89,7 @@ mod tests {
         let msg = ClientControl::Register {
             version: 1,
             password: Some("fox4217".into()),
+            requested_subdomain: None,
         };
         let mut buf = Vec::new();
         write_message(&mut buf, &msg).await.unwrap();
