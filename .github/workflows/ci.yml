@@ -24,7 +24,7 @@ jobs:
       - name: Build web frontend
         run: |
           cd web
-          npm install -g pnpm
+          npm install -g pnpm@9
           pnpm install
           pnpm build
 
