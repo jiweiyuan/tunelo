@@ -12,9 +12,11 @@ use tokio::time::{interval, Duration, Instant};
 use tracing::{info, info_span, warn, Instrument};
 
 use tunelo_protocol::{
-    read_message, write_message, ClientControl, RelayControl, PROTOCOL_VERSION,
+    error_codes, read_message, write_message, ClientControl, RelayControl, PROTOCOL_VERSION,
 };
 
+use crate::auth::password_ok;
+use crate::proxy;
 use crate::router::{Router, TunnelSession};
 
 /// Run the QUIC tunnel listener.
@@ -62,18 +64,38 @@ async fn handle_connection(
 ) -> Result<()> {
     let (mut tx, mut rx) = conn.accept_bi().await.context("accept control stream")?;
 
-    // ── Handshake ──────────────────────────────────────────────────────
-    let register: ClientControl = read_message(&mut rx).await.context("read Register")?;
-    let (version, password, requested_subdomain) = match register {
+    // The first control message decides the connection's role: a tunnel owner
+    // (Register) or a native visitor bridging into an existing tunnel (Attach).
+    let hello: ClientControl = read_message(&mut rx).await.context("read control hello")?;
+    match hello {
         ClientControl::Register { version, password, requested_subdomain } => {
-            (version, password, requested_subdomain)
+            handle_owner(conn, router, domain, max_session, tx, rx,
+                         version, password, requested_subdomain).await
+        }
+        ClientControl::Attach { version, subdomain, password } => {
+            handle_visitor(conn, router, tx, version, subdomain, password).await
         }
         _ => {
-            send_error(&mut tx, 1000, "expected Register").await;
+            send_error(&mut tx, 1000, "expected Register or Attach").await;
             bail!("unexpected first message");
         }
-    };
+    }
+}
 
+/// Serve a tunnel *owner*: register a hostname, then run the heartbeat loop
+/// (data streams are opened toward this connection by the visitor paths).
+#[allow(clippy::too_many_arguments)]
+async fn handle_owner(
+    conn: quinn::Connection,
+    router: &Router,
+    domain: &str,
+    max_session: u64,
+    mut tx: quinn::SendStream,
+    mut rx: quinn::RecvStream,
+    version: u8,
+    password: Option<String>,
+    requested_subdomain: Option<String>,
+) -> Result<()> {
     if version != PROTOCOL_VERSION {
         send_error(
             &mut tx,
@@ -148,6 +170,85 @@ async fn handle_connection(
             }
             reason = conn.closed() => {
                 info!(%reason, "QUIC connection closed");
+                break;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Serve a native *visitor*: authenticate against the target tunnel, then
+/// bridge every bidi stream the visitor opens to the owner connection.
+async fn handle_visitor(
+    conn: quinn::Connection,
+    router: &Router,
+    mut tx: quinn::SendStream,
+    version: u8,
+    subdomain: String,
+    password: Option<String>,
+) -> Result<()> {
+    if version != PROTOCOL_VERSION {
+        send_error(
+            &mut tx,
+            error_codes::VERSION_MISMATCH,
+            &format!("version mismatch: server={PROTOCOL_VERSION}, client={version}"),
+        )
+        .await;
+        bail!("visitor version mismatch");
+    }
+
+    let session = match router.get(&subdomain) {
+        Some(s) => s,
+        None => {
+            send_error(&mut tx, error_codes::NO_SUCH_TUNNEL, &format!("no tunnel: {subdomain}")).await;
+            bail!("attach to unknown tunnel {subdomain}");
+        }
+    };
+
+    if !password_ok(session.password.as_deref(), password.as_deref()) {
+        send_error(&mut tx, error_codes::UNAUTHORIZED, "invalid tunnel password").await;
+        bail!("visitor unauthorized for {subdomain}");
+    }
+
+    write_message(
+        &mut tx,
+        &RelayControl::Attached {
+            hostname: session.hostname.clone(),
+            tunnel_id: session.tunnel_id.clone(),
+        },
+    )
+    .await?;
+    info!(subdomain = %subdomain, "visitor attached");
+
+    // Bridge streams until the visitor disconnects or the owner tunnel dies.
+    loop {
+        tokio::select! {
+            accepted = conn.accept_bi() => {
+                let (v_send, v_recv) = match accepted {
+                    Ok(s) => s,
+                    Err(e) => {
+                        info!(error = %e, "visitor stream accept ended");
+                        break;
+                    }
+                };
+                // Re-read the session each stream so a reconnected owner (same
+                // subdomain, new QUIC connection) is picked up without dropping
+                // the visitor.
+                let Some(session) = router.get(&subdomain) else {
+                    info!(subdomain = %subdomain, "owner tunnel gone, dropping visitor");
+                    break;
+                };
+                tokio::spawn(
+                    async move {
+                        if let Err(e) = proxy::bridge_visitor_stream(&session, v_send, v_recv).await {
+                            warn!(error = %e, "visitor bridge error");
+                        }
+                    }
+                    .instrument(info_span!("bridge")),
+                );
+            }
+            reason = conn.closed() => {
+                info!(%reason, "visitor connection closed");
                 break;
             }
         }

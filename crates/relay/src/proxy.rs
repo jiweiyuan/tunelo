@@ -41,6 +41,34 @@ pub async fn relay_connection(
     Ok(())
 }
 
+/// Bridge a native visitor's QUIC stream to the owner tunnel.
+///
+/// Opens a fresh bidi stream on the owner connection and pipes bytes both
+/// ways between it and the visitor's stream — the QUIC-to-QUIC analogue of
+/// [`relay_connection`], with no TCP hop and no HTTP framing on either side.
+pub async fn bridge_visitor_stream(
+    session: &TunnelSession,
+    visitor_send: quinn::SendStream,
+    visitor_recv: quinn::RecvStream,
+) -> Result<()> {
+    let (owner_send, owner_recv) = session
+        .connection
+        .open_bi()
+        .await
+        .context("open owner QUIC stream")?;
+
+    debug!(subdomain = %session.subdomain, "bridging visitor stream");
+
+    let mut visitor = QuicBidi { send: visitor_send, recv: visitor_recv };
+    let mut owner = QuicBidi { send: owner_send, recv: owner_recv };
+
+    match io::copy_bidirectional(&mut visitor, &mut owner).await {
+        Ok((up, down)) => debug!(up, down, "visitor bridge done"),
+        Err(e) => debug!(error = %e, "visitor bridge ended"),
+    }
+    Ok(())
+}
+
 /// Combines QUIC Send+Recv streams into a single AsyncRead+AsyncWrite.
 struct QuicBidi {
     send: quinn::SendStream,

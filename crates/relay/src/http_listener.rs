@@ -18,6 +18,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info, info_span, warn, Instrument};
 
+use crate::auth::constant_time_eq;
 use crate::proxy;
 use crate::router::Router;
 
@@ -341,15 +342,6 @@ async fn consume_and_read_body(stream: &mut TcpStream) -> String {
     let raw = std::str::from_utf8(&buf[..n]).unwrap_or("");
     // Body starts after \r\n\r\n
     raw.split("\r\n\r\n").nth(1).unwrap_or("").to_string()
-}
-
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
 }
 
 async fn send_error(stream: &mut TcpStream, status: u16, msg: &str) {
