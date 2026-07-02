@@ -4,6 +4,7 @@
 //! 2. Accepts public HTTP connections from browsers
 //! 3. Routes by hostname through the tunnel
 
+pub mod auth;
 pub mod http_listener;
 pub mod proxy;
 pub mod router;
