@@ -16,6 +16,13 @@ pub enum ClientControl {
         /// Request a specific subdomain (e.g. for reconnect stability).
         #[serde(default)]
         requested_subdomain: Option<String>,
+        /// Ed25519 public key (32 bytes) claiming a stable, self-owned
+        /// subdomain. When present, the relay ignores `requested_subdomain`,
+        /// derives the name from this key, and replies with a
+        /// [`RelayControl::Challenge`] the client must sign before the tunnel
+        /// is granted. Absent for legacy public tunnels (random name).
+        #[serde(default)]
+        owner_pubkey: Option<Vec<u8>>,
     },
     /// Attach to an existing tunnel as a native *visitor*, bridging QUIC
     /// streams straight to the owner instead of arriving over HTTP. Lets a
@@ -34,6 +41,13 @@ pub enum ClientControl {
         /// Password for private tunnels; ignored for public ones.
         #[serde(default)]
         password: Option<String>,
+    },
+    /// Response to a [`RelayControl::Challenge`], proving possession of the
+    /// private key for the `owner_pubkey` sent in [`ClientControl::Register`]
+    /// by signing the relay's nonce.
+    Prove {
+        /// Ed25519 signature (64 bytes) over the challenge nonce.
+        signature: Vec<u8>,
     },
     /// Response to a heartbeat ping from the relay.
     HeartbeatAck,
@@ -57,6 +71,13 @@ pub enum RelayControl {
         /// The owner tunnel's session ID.
         tunnel_id: String,
     },
+    /// Ownership challenge, sent instead of [`RelayControl::Registered`] when a
+    /// [`ClientControl::Register`] carried an `owner_pubkey`. The client must
+    /// reply with a [`ClientControl::Prove`] signing this nonce.
+    Challenge {
+        /// Random per-connection nonce to sign. See [`crate::CHALLENGE_NONCE_LEN`].
+        nonce: Vec<u8>,
+    },
     /// Registration or protocol error.
     Error { code: u16, message: String },
     /// Periodic heartbeat to verify the tunnel is alive.
@@ -76,6 +97,8 @@ pub mod error_codes {
     pub const NO_SUCH_TUNNEL: u16 = 1005;
     /// Attach password missing or incorrect for a private tunnel.
     pub const UNAUTHORIZED: u16 = 1006;
+    /// Ownership proof missing, malformed, or signature invalid.
+    pub const IDENTITY_INVALID: u16 = 1007;
 
     pub const INTERNAL_ERROR: u16 = 1500;
 }

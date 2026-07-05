@@ -1,7 +1,9 @@
 pub mod codec;
+pub mod identity;
 pub mod messages;
 
 pub use codec::{read_message, write_message};
+pub use identity::{subdomain_for_pubkey, verify_ownership, CHALLENGE_NONCE_LEN};
 pub use messages::*;
 
 /// Protocol version — increment on breaking changes.

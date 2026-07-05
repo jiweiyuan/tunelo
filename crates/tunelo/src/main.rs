@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 use std::process::Stdio;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::{bail, Result};
@@ -15,8 +16,11 @@ use tokio::net::TcpStream;
 use tokio::process::Command as TokioCommand;
 
 mod fileserver;
+mod identity;
 mod proxy;
 mod tunnel;
+
+use identity::Identity;
 
 #[derive(Parser, Debug)]
 #[clap(
@@ -52,6 +56,17 @@ enum Command {
         /// Use without a value to auto-generate one, or specify your own.
         #[clap(long, num_args = 0..=1, default_missing_value = "__auto__")]
         password: Option<String>,
+
+        /// Claim a stable, self-owned subdomain instead of a random one.
+        /// The name is derived from a persistent Ed25519 identity and stays the
+        /// same across restarts; only this machine can reclaim it.
+        #[clap(long)]
+        stable: bool,
+
+        /// Path to the identity key file (implies --stable).
+        /// Defaults to the user config directory.
+        #[clap(long, value_name = "PATH")]
+        identity: Option<PathBuf>,
 
         /// Command to run (everything after --).
         #[clap(last = true)]
@@ -115,14 +130,15 @@ async fn main() -> Result<()> {
 
     match cli.command {
         Command::Port {
-            port, relay, local_host, password, command,
+            port, relay, local_host, password, stable, identity, command,
         } => {
             let password = resolve_password(password);
+            let identity = resolve_identity(stable, identity)?;
 
             if !command.is_empty() {
-                run_with_command(port, &local_host, relay, password, command).await
+                run_with_command(port, &local_host, relay, password, identity, command).await
             } else {
-                tunnel::run_tunnel(port, local_host, relay, password).await
+                tunnel::run_tunnel(port, local_host, relay, password, identity).await
             }
         }
 
@@ -151,7 +167,7 @@ async fn main() -> Result<()> {
                 let display = path.canonicalize().unwrap_or(path.clone());
                 let port = fileserver::start_background(path).await?;
                 println!("  Serving {} on :{port}", display.display());
-                tunnel::run_tunnel(port, "127.0.0.1".into(), relay, password).await
+                tunnel::run_tunnel(port, "127.0.0.1".into(), relay, password, None).await
             }
         }
 
@@ -169,6 +185,7 @@ async fn run_with_command(
     local_host: &str,
     relay: String,
     password: Option<String>,
+    identity: Option<Arc<Identity>>,
     command: Vec<String>,
 ) -> Result<()> {
     let cmd_display = command.join(" ");
@@ -208,7 +225,7 @@ async fn run_with_command(
             println!("\n  Command exited with {status}");
             std::process::exit(status.code().unwrap_or(1));
         }
-        result = tunnel::run_tunnel(port, host, relay, password) => {
+        result = tunnel::run_tunnel(port, host, relay, password, identity) => {
             // Tunnel ended (error or shutdown) — kill the child
             let _ = child.kill().await;
             result
@@ -230,6 +247,16 @@ async fn wait_for_port(port: u16, host: &str, timeout: Duration) -> Result<()> {
             Err(_) => tokio::time::sleep(Duration::from_millis(300)).await,
         }
     }
+}
+
+/// Load a persistent identity when the user asked for a stable subdomain
+/// (via `--stable` or `--identity <path>`); otherwise `None` for a random name.
+fn resolve_identity(stable: bool, path: Option<PathBuf>) -> Result<Option<Arc<Identity>>> {
+    if !stable && path.is_none() {
+        return Ok(None);
+    }
+    let identity = Identity::load_or_create(path)?;
+    Ok(Some(Arc::new(identity)))
 }
 
 fn resolve_password(password: Option<String>) -> Option<String> {

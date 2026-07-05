@@ -13,6 +13,7 @@ use tunelo_protocol::{
     read_message, write_message, ClientControl, RelayControl, PROTOCOL_VERSION,
 };
 
+use crate::identity::Identity;
 use crate::proxy;
 
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
@@ -24,14 +25,19 @@ pub async fn run_tunnel(
     local_host: String,
     relay: String,
     password: Option<String>,
+    identity: Option<Arc<Identity>>,
 ) -> Result<()> {
     let local_addr: Arc<str> = format!("{local_host}:{port}").into();
+    if let Some(id) = identity.as_deref() {
+        println!();
+        println!("  Stable subdomain: {}", id.subdomain());
+    }
     let mut backoff = INITIAL_BACKOFF;
     let mut first = true;
     let mut last_subdomain: Option<String> = None;
 
     loop {
-        match run_once(&relay, &password, &local_addr, first, &last_subdomain).await {
+        match run_once(&relay, &password, &local_addr, first, &last_subdomain, identity.as_deref()).await {
             Ok(SessionEnd::Shutdown(reason)) => {
                 // Server explicitly told us to stop (e.g. session expired)
                 println!("\n  {reason}");
@@ -71,6 +77,7 @@ async fn run_once(
     local_addr: &Arc<str>,
     first: bool,
     requested_subdomain: &Option<String>,
+    identity: Option<&Identity>,
 ) -> Result<SessionEnd> {
     let conn = connect(relay).await?;
     info!(relay = %relay, "connected");
@@ -83,17 +90,33 @@ async fn run_once(
             version: PROTOCOL_VERSION,
             password: password.clone(),
             requested_subdomain: requested_subdomain.clone(),
+            owner_pubkey: identity.map(|id| id.public_key()),
         },
     )
     .await?;
 
-    let resp: RelayControl = read_message(&mut rx).await?;
-    let hostname = match resp {
-        RelayControl::Registered { hostname, .. } => hostname,
-        RelayControl::Error { code, message } => {
-            bail!("relay error ({code}): {message}");
+    // A keyed registration is answered with a Challenge we must sign before the
+    // relay grants the tunnel; a legacy one is answered with Registered directly.
+    let hostname = loop {
+        match read_message::<RelayControl, _>(&mut rx).await? {
+            RelayControl::Registered { hostname, .. } => break hostname,
+            RelayControl::Challenge { nonce } => {
+                let Some(id) = identity else {
+                    bail!("relay sent an ownership challenge but no identity is configured");
+                };
+                write_message(
+                    &mut tx,
+                    &ClientControl::Prove {
+                        signature: id.sign(&nonce),
+                    },
+                )
+                .await?;
+            }
+            RelayControl::Error { code, message } => {
+                bail!("relay error ({code}): {message}");
+            }
+            _ => bail!("unexpected response"),
         }
-        _ => bail!("unexpected response"),
     };
 
     // Extract subdomain for reconnect stability
