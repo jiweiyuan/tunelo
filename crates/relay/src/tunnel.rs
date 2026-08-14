@@ -8,11 +8,13 @@
 use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
+use rand::RngCore;
 use tokio::time::{interval, Duration, Instant};
 use tracing::{info, info_span, warn, Instrument};
 
 use tunelo_protocol::{
-    error_codes, read_message, write_message, ClientControl, RelayControl, PROTOCOL_VERSION,
+    error_codes, read_message, subdomain_for_pubkey, verify_ownership, write_message,
+    ClientControl, RelayControl, CHALLENGE_NONCE_LEN, PROTOCOL_VERSION,
 };
 
 use crate::auth::password_ok;
@@ -68,9 +70,9 @@ async fn handle_connection(
     // (Register) or a native visitor bridging into an existing tunnel (Attach).
     let hello: ClientControl = read_message(&mut rx).await.context("read control hello")?;
     match hello {
-        ClientControl::Register { version, password, requested_subdomain } => {
+        ClientControl::Register { version, password, requested_subdomain, owner_pubkey } => {
             handle_owner(conn, router, domain, max_session, tx, rx,
-                         version, password, requested_subdomain).await
+                         version, password, requested_subdomain, owner_pubkey).await
         }
         ClientControl::Attach { version, subdomain, password } => {
             handle_visitor(conn, router, tx, version, subdomain, password).await
@@ -95,6 +97,7 @@ async fn handle_owner(
     version: u8,
     password: Option<String>,
     requested_subdomain: Option<String>,
+    owner_pubkey: Option<Vec<u8>>,
 ) -> Result<()> {
     if version != PROTOCOL_VERSION {
         send_error(
@@ -106,7 +109,13 @@ async fn handle_owner(
         bail!("version mismatch");
     }
 
-    let subdomain = router.resolve_subdomain(requested_subdomain.as_deref());
+    // A keyed owner claims a subdomain derived from its public key and must
+    // prove possession of the private key before the name is granted. A legacy
+    // owner gets a requested-or-random name with no proof.
+    let subdomain = match &owner_pubkey {
+        Some(pubkey) => verify_owner_challenge(&mut tx, &mut rx, pubkey).await?,
+        None => router.resolve_subdomain(requested_subdomain.as_deref()),
+    };
     let hostname = format!("{subdomain}.{domain}");
     let tunnel_id = uuid::Uuid::new_v4().to_string();
     let is_private = password.is_some();
@@ -117,10 +126,13 @@ async fn handle_owner(
         tunnel_id: tunnel_id.clone(),
         connection: conn.clone(),
         password,
+        owner_pubkey,
     });
 
-    let _guard = scopeguard::guard((), |_| {
-        router.remove(&subdomain);
+    let guard_subdomain = subdomain.clone();
+    let guard_tunnel_id = tunnel_id.clone();
+    let _guard = scopeguard::guard((), move |_| {
+        router.remove_if(&guard_subdomain, &guard_tunnel_id);
     });
 
     write_message(
@@ -254,6 +266,34 @@ async fn handle_visitor(
         }
     }
     Ok(())
+}
+
+/// Challenge a keyed owner to prove possession of its private key. Returns the
+/// subdomain derived from the public key on success; errors (after telling the
+/// client) if the proof is missing or the signature does not verify.
+async fn verify_owner_challenge(
+    tx: &mut quinn::SendStream,
+    rx: &mut quinn::RecvStream,
+    pubkey: &[u8],
+) -> Result<String> {
+    let subdomain = subdomain_for_pubkey(pubkey);
+
+    let mut nonce = vec![0u8; CHALLENGE_NONCE_LEN];
+    rand::rngs::OsRng.fill_bytes(&mut nonce);
+    write_message(tx, &RelayControl::Challenge { nonce: nonce.clone() }).await?;
+
+    let proof: ClientControl = read_message(rx).await.context("read ownership proof")?;
+    let ClientControl::Prove { signature } = proof else {
+        send_error(tx, error_codes::IDENTITY_INVALID, "expected ownership proof").await;
+        bail!("expected Prove message during ownership challenge");
+    };
+
+    if !verify_ownership(pubkey, &nonce, &signature) {
+        send_error(tx, error_codes::IDENTITY_INVALID, "invalid ownership proof").await;
+        bail!("invalid ownership proof for {subdomain}");
+    }
+
+    Ok(subdomain)
 }
 
 fn format_duration(secs: u64) -> String {

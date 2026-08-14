@@ -21,6 +21,10 @@ pub struct TunnelSession {
     pub connection: Connection,
     /// Optional password for private tunnels.
     pub password: Option<String>,
+    /// Ed25519 public key of the owner, when this is a stable self-owned
+    /// subdomain. The name is reserved for this key: only a proven holder can
+    /// reclaim it, and the legacy random-name path will not hand it out.
+    pub owner_pubkey: Option<Vec<u8>>,
 }
 
 /// Thread-safe hostname → tunnel router.
@@ -62,24 +66,44 @@ impl Router {
         }
     }
 
+    /// Remove a session only if it is still the one identified by `tunnel_id`.
+    /// A departing owner must not evict a newer session that has already
+    /// reclaimed the same subdomain (reconnect, or a keyed takeover).
+    #[inline]
+    pub fn remove_if(&self, subdomain: &str, tunnel_id: &str) {
+        if self
+            .sessions
+            .remove_if(subdomain, |_, s| s.tunnel_id == tunnel_id)
+            .is_some()
+        {
+            info!(subdomain = %subdomain, "tunnel removed");
+        }
+    }
+
     /// Check if a subdomain is registered.
     #[inline]
     pub fn contains(&self, subdomain: &str) -> bool {
         self.sessions.contains_key(subdomain)
     }
 
-    /// Resolve a subdomain: use the requested name if available, otherwise random.
-    /// Evicts stale sessions (dead QUIC connections) holding the requested name.
+    /// Resolve a subdomain for a legacy (unkeyed) client: use the requested name
+    /// if available, otherwise random. Evicts stale sessions (dead QUIC
+    /// connections) holding the requested name — but never a name reserved for
+    /// a key owner, which only a proven holder may reclaim.
     pub fn resolve_subdomain(&self, requested: Option<&str>) -> String {
         if let Some(name) = requested.filter(|n| !n.is_empty()) {
             match self.sessions.get(name) {
                 None => return name.to_string(),
-                Some(existing) if existing.connection.close_reason().is_some() => {
-                    drop(existing);
-                    self.remove(name);
-                    return name.to_string();
+                Some(existing) => {
+                    let reclaimable = existing.connection.close_reason().is_some()
+                        && existing.owner_pubkey.is_none();
+                    if reclaimable {
+                        drop(existing);
+                        self.remove(name);
+                        return name.to_string();
+                    }
+                    // Live, or reserved for a key owner → fall through to random.
                 }
-                _ => {} // taken by a live session, fall through to random
             }
         }
         self.generate_subdomain()

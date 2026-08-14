@@ -65,6 +65,7 @@ mod tests {
             version: 1,
             password: None,
             requested_subdomain: None,
+            owner_pubkey: None,
         };
         let mut buf = Vec::new();
         write_message(&mut buf, &msg).await.unwrap();
@@ -90,6 +91,7 @@ mod tests {
             version: 1,
             password: Some("fox4217".into()),
             requested_subdomain: None,
+            owner_pubkey: None,
         };
         let mut buf = Vec::new();
         write_message(&mut buf, &msg).await.unwrap();

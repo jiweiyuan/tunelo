@@ -27,6 +27,9 @@ serde_json = "1"
 include_dir = { workspace = true }
 rand = { workspace = true }
 
+ed25519-dalek = { workspace = true }
+dirs = { workspace = true }
+
 hyper = { version = "1", features = ["http1", "server"] }
 hyper-util = { version = "0.1", features = ["tokio", "http1", "server", "server-auto"] }
 http-body-util = "0.1"

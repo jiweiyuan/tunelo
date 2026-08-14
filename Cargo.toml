@@ -48,6 +48,11 @@ names = { version = "0.14", default-features = false }
 scopeguard = "1"
 include_dir = "0.7"
 
+# Stable identity (self-owned subdomains): Ed25519 keypair + SHA-256 name
+ed25519-dalek = "2"
+sha2 = "0.10"
+dirs = "5"
+
 [profile.release]
 opt-level = 3
 lto = "thin"
